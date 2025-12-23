@@ -454,26 +454,37 @@ class CarlaEnv(gym.Env):
 
         # Spawn the ego vehicle
         ego_spawn_times = 0
+        max_total_attempts = self.max_ego_spawn_times * 3  # Hard limit to prevent infinite loop
+
         while True:
             if ego_spawn_times > self.max_ego_spawn_times:
-                self.reset()  # If failed too many times, reset the environment
-        
+                # Too many failed attempts, clear actors and retry from scratch
+                print(f"[WARN] Failed to spawn ego after {ego_spawn_times} attempts, clearing actors...")
+                self._clear_all_actors(['vehicle.*', 'walker.*', 'controller.ai.walker'])
+                self.spawned_vehicles = []
+                self.used_spawn_points = []
+                ego_spawn_times = 0  # Reset counter after clearing
+                time.sleep(1.0)  # Give CARLA time to clean up
+
+            if ego_spawn_times > max_total_attempts:
+                raise RuntimeError(f"Failed to spawn ego vehicle after {max_total_attempts} total attempts")
+
             # Select a spawn point for the ego vehicle by excluding locations used by nearby vehicles
             available_spawn_points = [
                 sp for sp in self.vehicle_spawn_points if sp not in self.used_spawn_points
             ]
-            
+
             if len(available_spawn_points) > 0:
-                transform = random.choice(available_spawn_points)  # Choose a spawn point not used by nearby vehicles
+                transform = random.choice(available_spawn_points)
             else:
-                transform = random.choice(self.vehicle_spawn_points)  # Fallback: use any spawn point
-        
+                transform = random.choice(self.vehicle_spawn_points)
+
             # Try to spawn the ego vehicle at the selected location
             if self._try_spawn_ego_vehicle_at(transform):
                 break  # Successfully spawned the ego vehicle
             else:
-                ego_spawn_times += 1  # Retry counter
-                time.sleep(0.1)  # Small delay before retrying
+                ego_spawn_times += 1
+                time.sleep(0.1)
 
         self.stationary_penalty_timer = 0.0   # 前方无车累计静止时长（奖励函数中）
         self.stationary_reward_timer = 0.0   # 前方有车累计静止时长（奖励函数中）

@@ -18,6 +18,7 @@ sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')
 import argparse
 import traceback
 import random
+import time
 import collections
 import json
 from dataclasses import asdict
@@ -161,15 +162,32 @@ def train(cfg: Config) -> None:
 
     replay_buffer = ReplayBuffer(cfg.buffer_size)
     gstep = 0
+    consecutive_failures = 0
+    max_consecutive_failures = 5
 
     try:
         for ep in range(cfg.max_episodes):
-            obs = env.reset()
+            # Reset with error handling
+            try:
+                obs = env.reset()
+                consecutive_failures = 0  # Reset failure counter on success
+            except Exception as e:
+                consecutive_failures += 1
+                print(f"[Error] Reset failed ({consecutive_failures}/{max_consecutive_failures}): {e}")
+                if consecutive_failures >= max_consecutive_failures:
+                    print("[FATAL] Too many consecutive failures, check CARLA server!")
+                    raise
+                time.sleep(2.0)  # Wait before retry
+                continue
+
             done = False
             ep_reward = 0.0
             ep_step = 0
+            info = {}  # Initialize info to avoid undefined variable
             wm_state = world_model.init_state(batch_size=1)
             scenario_name = getattr(env.cur_scenario, "name", "unknown")
+            step_failures = 0
+
             while not done:
                 proprio = build_proprio_vector(obs)
                 latent = world_model.encode(obs['rgb'], proprio)
@@ -178,10 +196,16 @@ def train(cfg: Config) -> None:
 
                 try:
                     next_obs, reward, cost, done, info = env.step(action)
-                except Exception:
+                    step_failures = 0  # Reset on success
+                except Exception as e:
+                    step_failures += 1
                     traceback.print_exc()
-                    print("[Error] Carla step failed; resetting env...")
-                    obs = env.reset()
+                    print(f"[Error] Step failed ({step_failures}/3): {e}")
+                    if step_failures >= 3:
+                        print("[WARN] Too many step failures, forcing episode end...")
+                        done = True
+                        break
+                    time.sleep(0.5)
                     continue
 
                 next_proprio = build_proprio_vector(next_obs)
