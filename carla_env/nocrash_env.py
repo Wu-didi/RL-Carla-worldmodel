@@ -406,17 +406,19 @@ class NoCrashEnv(gym.Env):
         """
         Calculate timeout based on route distance.
 
-        Original formula: ((path_distance / 1000.0) / 5.0) * 3600.0 + 20.0 (in ms)
-        Assuming 5 m/s average speed, converted to steps at dt=0.1s
+        Original NoCrash formula: based on route length / average speed.
+        For strict mode, we don't cap at max_steps to allow long routes.
         """
-        # Assume 5 m/s average speed
+        # Assume 5 m/s average speed (18 km/h, reasonable for urban driving)
         estimated_time = distance / 5.0  # seconds
-        # Add 20% buffer + fixed offset
+        # Add 20% buffer + fixed offset for traffic/turns
         timeout_seconds = estimated_time * 1.2 + 20.0
-        # Convert to steps (assuming dt=0.1)
+        # Convert to steps
         timeout_steps = int(timeout_seconds / self.env.dt)
-        # Clamp to reasonable range
-        return max(100, min(timeout_steps, self.max_steps))
+        # For strict NoCrash mode, use higher upper bound to allow long routes
+        # Original benchmark had no hard cap, timeout was purely distance-based
+        upper_bound = max(self.max_steps, 5000) if self.use_predefined_routes else self.max_steps
+        return max(100, min(timeout_steps, upper_bound))
 
     def reset(self):
         """Reset environment with next scenario."""
@@ -428,24 +430,37 @@ class NoCrashEnv(gym.Env):
         self.env.number_of_walkers = self.cur_scenario.traffic.pedestrians
         self.env.world.set_weather(self.cur_scenario.weather_params)
 
-        # Reset base environment
+        # Reset base environment (spawns ego at random location first)
         obs = self.env.reset()
 
         # Get start and goal for this scenario
         start_tf, goal_tf = self._pick_goal(self.cur_scenario)
 
+        # [FIX #1] Teleport ego to predefined start position
+        if start_tf is not None and self.use_predefined_routes:
+            self.env.teleport_ego(start_tf)
+            self.start_location = start_tf.location
+        else:
+            self.start_location = self.env.ego.get_transform().location
+
         if goal_tf:
             self.goal_location = goal_tf.location
-            self.route_distance = self.env.ego.get_transform().location.distance(goal_tf.location)
+            # [FIX #3] Use actual route distance, not straight-line
+            self.route_distance = self.env.get_route_distance(
+                self.start_location, self.goal_location
+            )
         else:
             self.goal_location = None
             self.route_distance = 100.0  # Default
 
-        self.start_location = self.env.ego.get_transform().location
         self.step_count = 0
 
-        # Calculate dynamic timeout based on route distance
+        # Calculate dynamic timeout based on actual route distance
         self.current_timeout = self._calculate_timeout(self.route_distance)
+
+        # Re-fetch observation after teleport
+        if start_tf is not None and self.use_predefined_routes:
+            obs = self.env._get_obs()
 
         return obs
 
@@ -459,24 +474,30 @@ class NoCrashEnv(gym.Env):
         dist_to_goal = ego_loc.distance(self.goal_location) if self.goal_location else 1e9
 
         # Check termination conditions
-        success = dist_to_goal <= self.goal_threshold
-        timeout = self.step_count >= self.current_timeout
         collision = bool(self.env._is_collision)
         off_road = bool(self.env._is_off_road)
+        timeout = self.step_count >= self.current_timeout
+        reached_goal = dist_to_goal <= self.goal_threshold
 
-        # NoCrash: collision is immediate failure
-        done = done or success or timeout or collision
+        # [FIX #2] NoCrash: collision is immediate failure, prevents success
+        # Success ONLY if reached goal WITHOUT collision
+        success = reached_goal and not collision
 
-        # Reward shaping
-        if success:
-            reward += 100.0
-            self.episode_stats["success"] += 1
+        # Determine termination reason (mutually exclusive for stats)
+        # Priority: collision > success > timeout
+        done = done or collision or success or timeout
+
+        # Reward shaping and statistics (mutually exclusive counting)
         if collision:
             reward -= 100.0
             self.episode_stats["collision"] += 1
-        if timeout:
+        elif success:
+            reward += 100.0
+            self.episode_stats["success"] += 1
+        elif timeout:
             reward -= 10.0
             self.episode_stats["timeout"] += 1
+
         if off_road:
             self.episode_stats["off_road"] += 1
 

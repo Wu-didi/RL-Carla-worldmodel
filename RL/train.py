@@ -349,6 +349,7 @@ def build_argparser() -> argparse.ArgumentParser:
 def apply_overrides(cfg: Config, args: argparse.Namespace) -> Config:
     cfg.run_name = args.run_name
     cfg.run_root = args.run_root
+    cfg.town = args.town  # Fix: apply --town argument
     cfg.pretrained_agent_path = args.pretrained_agent_path
     cfg.pretrained_world_model_path = args.pretrained_world_model_path
     cfg.network = args.network

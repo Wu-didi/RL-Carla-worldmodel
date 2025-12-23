@@ -583,8 +583,62 @@ class CarlaEnv(gym.Env):
         self._set_synchronous_mode(True)  # Switch to synchronous mode for simulation
         self.world.tick()  # Advance the simulation by one tick     
 
-        self.lane_yaw_list = []          
+        self.lane_yaw_list = []
         return self._get_obs()  # Return the initial observation after reset
+
+    def teleport_ego(self, transform: carla.Transform):
+        """
+        Teleport the ego vehicle to a specific transform.
+        Used by NoCrashEnv to set predefined start positions.
+        """
+        if self.ego is None:
+            return False
+        # Disable physics temporarily for clean teleport
+        self.ego.set_simulate_physics(False)
+        self.ego.set_transform(transform)
+        self.world.tick()
+        self.ego.set_simulate_physics(True)
+        # Reset velocity to zero
+        self.ego.set_target_velocity(carla.Vector3D(0, 0, 0))
+        self.world.tick()
+        return True
+
+    def get_route_distance(self, start_loc: carla.Location, end_loc: carla.Location) -> float:
+        """
+        Calculate actual route distance using CARLA's GlobalRoutePlanner.
+        Returns distance in meters along the road network.
+        """
+        try:
+            # Try multiple import paths for CARLA's GlobalRoutePlanner
+            # Path depends on CARLA version and installation
+            try:
+                from agents.navigation.global_route_planner import GlobalRoutePlanner
+            except ImportError:
+                # Alternative path for some CARLA installations
+                from carla.agents.navigation.global_route_planner import GlobalRoutePlanner
+
+            grp = GlobalRoutePlanner(self.world.get_map(), sampling_resolution=1.0)
+            route = grp.trace_route(start_loc, end_loc)
+            if not route:
+                # Fallback to straight-line distance
+                print("[WARN] GlobalRoutePlanner returned empty route, using straight-line distance")
+                return start_loc.distance(end_loc)
+            # Sum up segment distances
+            total_dist = 0.0
+            for i in range(len(route) - 1):
+                wp1 = route[i][0].transform.location
+                wp2 = route[i + 1][0].transform.location
+                total_dist += wp1.distance(wp2)
+            return total_dist
+        except ImportError:
+            # GlobalRoutePlanner not available, use straight-line distance
+            print("[WARN] GlobalRoutePlanner not found, using straight-line distance. "
+                  "Make sure CARLA PythonAPI/carla/agents is in PYTHONPATH for accurate route distance.")
+            return start_loc.distance(end_loc)
+        except Exception as e:
+            # Other errors (e.g., route planning failed)
+            print(f"[WARN] Route planning failed ({e}), using straight-line distance")
+            return start_loc.distance(end_loc)
 
     #expert step
     def step_sample(self):
