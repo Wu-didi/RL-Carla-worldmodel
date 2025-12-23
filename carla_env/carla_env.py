@@ -607,38 +607,48 @@ class CarlaEnv(gym.Env):
         """
         Calculate actual route distance using CARLA's GlobalRoutePlanner.
         Returns distance in meters along the road network.
+        Falls back to heuristic (1.4x straight-line) if GlobalRoutePlanner unavailable.
         """
+        # Use cached flag to avoid repeated import attempts and warnings
+        if not hasattr(self, '_grp_available'):
+            self._grp_available = None  # None = not checked yet
+
+        if self._grp_available is False:
+            # Already know GlobalRoutePlanner is unavailable, use heuristic
+            return start_loc.distance(end_loc) * 1.4
+
         try:
             # Try multiple import paths for CARLA's GlobalRoutePlanner
-            # Path depends on CARLA version and installation
             try:
                 from agents.navigation.global_route_planner import GlobalRoutePlanner
             except ImportError:
-                # Alternative path for some CARLA installations
                 from carla.agents.navigation.global_route_planner import GlobalRoutePlanner
 
             grp = GlobalRoutePlanner(self.world.get_map(), sampling_resolution=1.0)
             route = grp.trace_route(start_loc, end_loc)
             if not route:
-                # Fallback to straight-line distance
-                print("[WARN] GlobalRoutePlanner returned empty route, using straight-line distance")
-                return start_loc.distance(end_loc)
+                return start_loc.distance(end_loc) * 1.4
             # Sum up segment distances
             total_dist = 0.0
             for i in range(len(route) - 1):
                 wp1 = route[i][0].transform.location
                 wp2 = route[i + 1][0].transform.location
                 total_dist += wp1.distance(wp2)
+            self._grp_available = True
             return total_dist
         except ImportError:
-            # GlobalRoutePlanner not available, use straight-line distance
-            print("[WARN] GlobalRoutePlanner not found, using straight-line distance. "
-                  "Make sure CARLA PythonAPI/carla/agents is in PYTHONPATH for accurate route distance.")
-            return start_loc.distance(end_loc)
+            # GlobalRoutePlanner not available - warn once, then use heuristic
+            if self._grp_available is None:
+                print("[WARN] GlobalRoutePlanner not found, using heuristic (1.4x straight-line). "
+                      "For accurate route distance, add CARLA PythonAPI/carla/agents to PYTHONPATH.")
+            self._grp_available = False
+            return start_loc.distance(end_loc) * 1.4
         except Exception as e:
-            # Other errors (e.g., route planning failed)
-            print(f"[WARN] Route planning failed ({e}), using straight-line distance")
-            return start_loc.distance(end_loc)
+            # Other errors - use heuristic
+            if self._grp_available is None:
+                print(f"[WARN] Route planning failed ({e}), using heuristic")
+            self._grp_available = False
+            return start_loc.distance(end_loc) * 1.4
 
     #expert step
     def step_sample(self):

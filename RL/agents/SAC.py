@@ -207,13 +207,19 @@ class SACContinuous:
         self.device = device
 
     def take_action(self, state):
-        state = torch.tensor([state], dtype=torch.float).to(self.device)
+        # Convert to numpy array first, then to tensor (avoids slow list-of-arrays conversion)
+        if not isinstance(state, np.ndarray):
+            state = np.array(state, dtype=np.float32)
+        state = torch.from_numpy(state).unsqueeze(0).float().to(self.device)
         action = self.actor(state)[0]
         return action.detach().cpu().numpy().flatten()
 
 
     def take_action_bc(self, state):
-        state = torch.tensor([state], dtype=torch.float).to(self.device)
+        # Convert to numpy array first, then to tensor
+        if not isinstance(state, np.ndarray):
+            state = np.array(state, dtype=np.float32)
+        state = torch.from_numpy(state).unsqueeze(0).float().to(self.device)
         # 全局 μ、σ
         norm_path = "/home/dt/carla_0.9.13/PythonAPI/EasyCarla-RL-main/example/params_dql/bc_norm_726.npz"
 
@@ -416,7 +422,10 @@ class SACContinuous_attention_bc:
         self.device = device
 
     def take_action(self, state):
-        state = torch.tensor([state], dtype=torch.float).to(self.device)
+        # Convert to numpy array first, then to tensor (avoids slow list-of-arrays conversion)
+        if not isinstance(state, np.ndarray):
+            state = np.array(state, dtype=np.float32)
+        state = torch.from_numpy(state).unsqueeze(0).float().to(self.device)
         action = self.actor(state)[0]
         return action.detach().cpu().numpy().flatten()
 
