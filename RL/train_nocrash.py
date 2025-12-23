@@ -19,6 +19,7 @@ import argparse
 import traceback
 import random
 import time
+import gc
 import collections
 import json
 from dataclasses import asdict
@@ -246,6 +247,13 @@ def train(cfg: Config) -> None:
                 save_checkpoint(cfg, agent, world_model, gstep, ep)
 
             print(f"[NoCrash Ep {ep:03d}] Scenario={scenario_name} Reward={ep_reward:.2f} Steps={ep_step} Success={info.get('success', False)}")
+
+            # Periodic memory cleanup to prevent memory leaks
+            if (ep + 1) % 50 == 0:
+                gc.collect()
+                if torch.cuda.is_available():
+                    torch.cuda.empty_cache()
+                writer.flush()  # Flush TensorBoard data to disk
 
     finally:
         try:

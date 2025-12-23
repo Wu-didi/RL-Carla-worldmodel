@@ -359,7 +359,7 @@ class CarlaEnv(gym.Env):
             except:
                 pass
             self.collision_sensor = None
-    
+
         # Stop and destroy the LiDAR sensor if it exists
         if self.lidar_sensor is not None:
             try:
@@ -368,20 +368,32 @@ class CarlaEnv(gym.Env):
             except:
                 pass
             self.lidar_sensor = None
-    
-            # 清除并销毁现有传感器
-        if self.rgb_camera:
-            self.rgb_camera.stop()
-            self.rgb_camera.destroy()
-        if self.segmentation_camera:
-            self.segmentation_camera.stop()
-            self.segmentation_camera.destroy()
-        if self.depth_camera:
-            self.depth_camera.stop()
-            self.depth_camera.destroy()
-        # 
-    
-    
+
+        # Stop and destroy camera sensors (with try-except to prevent crash)
+        if self.rgb_camera is not None:
+            try:
+                self.rgb_camera.stop()
+                self.rgb_camera.destroy()
+            except:
+                pass
+            self.rgb_camera = None
+
+        if self.segmentation_camera is not None:
+            try:
+                self.segmentation_camera.stop()
+                self.segmentation_camera.destroy()
+            except:
+                pass
+            self.segmentation_camera = None
+
+        if self.depth_camera is not None:
+            try:
+                self.depth_camera.stop()
+                self.depth_camera.destroy()
+            except:
+                pass
+            self.depth_camera = None
+
         # Reset collision and off-road status flags
         self._is_collision = False
         self._is_off_road = False
