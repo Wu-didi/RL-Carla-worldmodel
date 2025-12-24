@@ -249,11 +249,17 @@ def train(cfg: Config) -> None:
             print(f"[NoCrash Ep {ep:03d}] Scenario={scenario_name} Reward={ep_reward:.2f} Steps={ep_step} Success={info.get('success', False)}")
 
             # Periodic memory cleanup to prevent memory leaks
-            if (ep + 1) % 50 == 0:
+            # More frequent cleanup for dense scenarios (every 10 eps) vs normal (every 50 eps)
+            is_dense = 'dense' in scenario_name.lower()
+            cleanup_interval = 10 if is_dense else 50
+
+            if (ep + 1) % cleanup_interval == 0:
                 gc.collect()
                 if torch.cuda.is_available():
                     torch.cuda.empty_cache()
                 writer.flush()  # Flush TensorBoard data to disk
+                if is_dense:
+                    print(f"[Memory] Cleanup performed (dense scenario)")
 
     finally:
         try:
