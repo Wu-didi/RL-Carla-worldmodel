@@ -38,8 +38,8 @@ while [ $RETRY_COUNT -lt $MAX_RETRIES ]; do
         --network Attention_SAC \
         --max_episodes 3000 \
         --save_interval_episodes 50 \
-        --pretrained_agent_path "RL/runs/${RUN_NAME}/checkpoints/agent/sac_latest.pt" \
-        --pretrained_world_model_path "RL/runs/${RUN_NAME}/checkpoints/world_model/world_latest.pt"
+        --pretrained_agent_path "RL/runs/${RUN_NAME}/checkpoints/agent/last.pt" \
+        --pretrained_world_model_path "RL/runs/${RUN_NAME}/checkpoints/world_model/last.pt"
 
     EXIT_CODE=$?
 

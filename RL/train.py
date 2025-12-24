@@ -178,11 +178,30 @@ def save_checkpoint(cfg: Config, agent: SAC_setup, world_model: DreamerWorldMode
     os.makedirs(agent_dir, exist_ok=True)
     os.makedirs(wm_dir, exist_ok=True)
 
-    agent_ckpt_name = f"sac_ep{ep:05d}_gs{gstep:06d}.pt"
-    agent.save_model(agent_dir, id=agent_ckpt_name.replace(".pt", ""))
+    # Save agent checkpoint
+    agent_ckpt_id = f"sac_ep{ep:05d}_gs{gstep:06d}"
+    agent.save_model(agent_dir, id=agent_ckpt_id)
+    agent_ckpt_file = f"sac_ckpt_{agent_ckpt_id}.pt"
+
+    # Save world model checkpoint
     wm_ckpt_name = f"world_ep{ep:05d}_gs{gstep:06d}.pt"
     world_model.save(os.path.join(wm_dir, wm_ckpt_name))
-    print(f"[Checkpoint] agent→{agent_ckpt_name}, world→{wm_ckpt_name}")
+
+    # Create symlinks to last checkpoint (like many popular projects do)
+    agent_last = os.path.join(agent_dir, "last.pt")
+    wm_last = os.path.join(wm_dir, "last.pt")
+
+    # Remove old symlinks if exist
+    if os.path.islink(agent_last):
+        os.remove(agent_last)
+    if os.path.islink(wm_last):
+        os.remove(wm_last)
+
+    # Create new symlinks (relative path for portability)
+    os.symlink(agent_ckpt_file, agent_last)
+    os.symlink(wm_ckpt_name, wm_last)
+
+    print(f"[Checkpoint] agent→{agent_ckpt_file}, world→{wm_ckpt_name} (last.pt updated)")
 
 
 def load_checkpoint_if_any(cfg: Config, agent: SAC_setup, world_model: DreamerWorldModel) -> None:
