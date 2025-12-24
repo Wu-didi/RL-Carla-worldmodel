@@ -1,0 +1,7 @@
+[Checkpoint] agent→sac_ep00249_gs072256.pt, world→world_ep00249_gs072256.pt
+[NoCrash Ep 249] Scenario=dense_WetNoon_route24 Reward=-294.25 Steps=1 Success=False
+Collision occurred
+[NoCrash Ep 250] Scenario=dense_HardRainNoon_route00 Reward=943.48 Steps=136 Success=False
+Collision occurred
+[NoCrash Ep 251] Scenario=dense_HardRainNoon_route01 Reward=-294.12 Steps=1 Success=False
+mystart.sh：行 31:  6235 已杀死               python RL/train_nocrash.py --run_name nocrash_train --nocrash_strict --town Town01 --nocrash_weather_group training --nocrash_scenarios empty,regular,dense --network Attention_SAC --max_episodes 3000 --save_interval_episodes 50
